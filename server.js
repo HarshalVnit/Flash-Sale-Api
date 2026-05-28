@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
-
+const startCleanupWorker = require('./workers/cleanupWorker');
 // Import our raw SQL connection
 const pool = require('./config/db');
 
@@ -18,6 +18,8 @@ const eventRoutes = require('./routes/eventRoutes');
 app.use('/api/events', eventRoutes);
 const seatRoutes = require('./routes/seatRoutes');
 app.use('/api', seatRoutes); // Mount it on /api
+const orderRoutes = require('./routes/orderRoutes');
+app.use('/api', orderRoutes);
 // ... existing /api/health route ...
 // A simple test route to make sure it works
 app.get('/api/health', async (req, res) => {
@@ -35,6 +37,30 @@ app.get('/api/health', async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+
+
+// Import the Redis client we just created
+const redisClient = require('./config/redis');
+
+
+
+// Create an asynchronous startup function
+const startServer = async () => {
+  try {
+    // 1. Force Node.js to connect to Redis FIRST
+    await redisClient.connect();
+    
+    // 2. ONLY start listening for user traffic AFTER Redis is ready
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      //here is where we start the cleanup worker after the server is up and running
+      startCleanupWorker();
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+// Execute the function to boot the app
+startServer();

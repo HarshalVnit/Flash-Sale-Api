@@ -1,5 +1,8 @@
 const pool = require('../config/db');
 
+const redisClient = require('../config/redis'); 
+
+
 // @desc    Generate seats for an event
 // @route   POST /api/events/:id/generate-seats
 const generateSeats = async (req, res) => {
@@ -58,4 +61,58 @@ const generateSeats = async (req, res) => {
   }
 };
 
-module.exports = { generateSeats };
+
+
+
+const getSeatsForEvent = async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    
+    // 2. Define a unique string name for this specific data in Redis
+    const cacheKey = `seats_event_${eventId}`;
+
+    // 3. CACHE HIT: Check if Redis already has the data
+    const cachedSeats = await redisClient.get(cacheKey);
+
+    if (cachedSeats) {
+      console.log('⚡ Serving from Redis Cache');
+      // Redis stores data as simple text strings, so we must parse it back into JSON
+      return res.status(200).json({
+        source: 'Redis Cache',
+        total_seats: JSON.parse(cachedSeats).length,
+        seats: JSON.parse(cachedSeats)
+      });
+    }
+
+    // 4. CACHE MISS: Redis is empty. We must ask the PostgreSQL Librarian.
+    console.log('🐢 Serving from PostgreSQL Database');
+    const query = `
+      SELECT id, seat_number, price 
+      FROM seats 
+      WHERE event_id = $1 
+      ORDER BY id ASC;
+    `;
+    const result = await pool.query(query, [eventId]);
+
+    // 5. CACHE WARMING: Save the result into Redis for the NEXT user
+    // { EX: 3600 } means "Expire this cache in 3600 seconds (1 hour)"
+    await redisClient.set(cacheKey, JSON.stringify(result.rows), {
+      EX: 3600 
+    });
+
+    res.status(200).json({
+      source: 'PostgreSQL Database',
+      total_seats: result.rowCount,
+      seats: result.rows
+    });
+
+  } catch (error) {
+    console.error('Error fetching seats:', error);
+    res.status(500).json({ error: 'Failed to fetch seats' });
+  }
+};
+
+
+
+
+module.exports = { generateSeats, getSeatsForEvent };
