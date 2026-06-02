@@ -4,9 +4,10 @@ const redisClient = require("../config/redis");
 // @desc    Reserve a seat for 5 minutes
 // @route   POST /api/events/:eventId/seats/:seatId/reserve
 const reserveSeat = async (req, res) => {
+  const { eventId, seatId } = req.params;//so that both try and catch blocks can access them for the lock key cleanup in case of an error.
   try {
-    const { eventId, seatId } = req.params;
-    const { user_id } = req.body; // In a real app, this comes from a login token
+    // const { user_id } = req.body; // In a real app, this comes from a login token
+    const user_id = req.user.id;
 
     if (!user_id) {
       return res.status(400).json({ error: "user_id is required in the body" });
@@ -26,7 +27,7 @@ const reserveSeat = async (req, res) => {
     const lockKey = `event_${eventId}_seat_lock_${seatId}`;
     // 2. THE BOUNCER: Try to grab the lock in Redis
     const lockAcquired = await redisClient.set(lockKey, String(user_id), {
-      EX: 300, // Expires in 300 seconds (5 minutes)
+      EX: 360, // Expires in 360 seconds (6 minutes)
       NX: true, // NX means "Only set this IF IT DOES NOT EXIST"
     });
 
@@ -51,24 +52,31 @@ const reserveSeat = async (req, res) => {
       message: "Seat temporarily reserved for 5 minutes! Proceed to payment.",
       reservation: result.rows[0],
     });
-  } catch (error) {
-    // 6. The Safety Net: If PostgreSQL crashes, delete the lock so the seat doesn't stay stuck
-    const { eventId, seatId } = req.params;
+  }
+  catch (error) {
+    const lockKey = `event_${eventId}_seat_lock_${seatId}`;
+    await redisClient.del(lockKey);
+    
+    // THE FIX: Check if it's a PostgreSQL Unique Violation Error
+    if (error.code === '23505') {
+      return res.status(400).json({ 
+        error: "Sorry, this seat was just purchased by someone else!" 
+      });
+    }
 
-    await redisClient.del(`event_${eventId}_seat_lock_${seatId}`);
-
-    console.error("❌ Error reserving seat:", error);
+    console.error('❌ Error reserving seat:', error);
     res.status(500).json({ error: "Server error while reserving seat." });
   }
 };
 
 
 
-222
+
 const confirmPayment = async (req, res) => {
   try {
     const { reservationId } = req.params;
-    const { user_id } = req.body; // Again, usually comes from a JWT token
+    // const { user_id } = req.body; // Again, usually comes from a JWT token
+    const user_id = req.user.id;
 
     if (!user_id) {
       return res.status(400).json({ error: "user_id is required" });

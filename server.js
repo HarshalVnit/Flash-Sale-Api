@@ -20,6 +20,8 @@ const seatRoutes = require('./routes/seatRoutes');
 app.use('/api', seatRoutes); // Mount it on /api
 const orderRoutes = require('./routes/orderRoutes');
 app.use('/api', orderRoutes);
+const authRoutes = require('./routes/authRoutes');
+app.use('/api/auth', authRoutes);
 // ... existing /api/health route ...
 // A simple test route to make sure it works
 app.get('/api/health', async (req, res) => {
@@ -55,6 +57,7 @@ const startServer = async () => {
       console.log(`🚀 Server running on port ${PORT}`);
       //here is where we start the cleanup worker after the server is up and running
       startCleanupWorker();
+      // CLEANER CLEANS EVERY 1 MIN WHERE EXPIRY  IS 5 MINUTES AND REDIS WILL CLEAR LOCKS EVERY 6 MINUTES. THIS MEANS THE CLEANUP WORKER WILL RUN EVERY MINUTE AND DELETE ANY RESERVATIONS THAT HAVE BEEN PENDING FOR MORE THAN 5 MINUTES. THE REDIS LOCKS WILL EXPIRE AFTER 6 MINUTES, SO EVEN IF THERE'S AN ISSUE WITH THE CLEANUP WORKER, THE LOCKS WILL STILL BE CLEARED BY REDIS, PREVENTING SEATS FROM BEING PERMANENTLY BLOCKED.
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
