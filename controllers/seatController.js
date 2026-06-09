@@ -59,8 +59,13 @@ const generateSeats = async (req, res) => {
     // Release the client back to the pool
     client.release();
   }
-};
+};  
 
+// What did we just do? (The Logic)
+// Instead of running pool.query 5,000 times inside a loop, we used Javascript to build one incredibly long string that looks like this:
+// INSERT INTO seats (...) VALUES ($1, $2, $3), ($4, $5, $6), ($7, $8, $9)...
+
+// We then sent that single massive query to PostgreSQL. It executes in milliseconds.
 
 
 
