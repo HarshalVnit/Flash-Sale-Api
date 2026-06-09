@@ -1,0 +1,14 @@
+config:
+  target: "http://localhost:5000"
+  phases:
+    - duration: 1            # Run the test for exactly 1 second
+      arrivalRate: 1000      # Fire 1,000 requests in that 1 second!
+      name: "The Flash Sale Spike"
+
+scenarios:
+  - name: "Attempt to buy Seat #99"
+    flow:
+      - post:
+          url: "/api/events/1/seats/99/reserve" # Testing on a brand new seat!
+          headers:
+            Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NSwiaWF0IjoxNzgwNDA5MzM2LCJleHAiOjE3ODMwMDEzMzZ9.lJZoQeqSAsKhGIsBOumvu-QWXDnZMopoRtbFITDSLN4" # Paste your token here
